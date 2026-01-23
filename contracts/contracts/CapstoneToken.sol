@@ -21,7 +21,7 @@ contract CapstoneToken is ERC20, Ownable {
         string memory name_,
         string memory symbol_,
         uint256 initialSupply
-    ) ERC20(name_, symbol_) {
+    ) ERC20(name_, symbol_) Ownable(msg.sender) {
         _mint(msg.sender, initialSupply);
     }
 }
