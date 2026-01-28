@@ -40,8 +40,12 @@ export function useWallet() {
             setAccount(accounts[0]);
             setChainId(currentChainId);
             setError(null);
-        } catch (err) {
-            setError("Failed to connect wallet");
+        } catch (err: any) {
+            if (err?.code === 4001) {
+                setError("Wallet connection request was rejected");
+            } else {
+                setError("Failed to connect wallet");
+            }
         }
     }
 
