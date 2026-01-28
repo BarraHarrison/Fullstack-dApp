@@ -1,34 +1,22 @@
-import { useState } from "react";
-import { BrowserProvider } from "ethers";
+import { useWallet } from "./hooks/useWallet";
 
 function App() {
-  const [account, setAccount] = useState<string | null>(null);
-
-  async function connectWallet() {
-    if (!(window as any).ethereum) {
-      alert("MetaMask not detected");
-      return;
-    }
-
-    const provider = new BrowserProvider((window as any).ethereum);
-    const accounts = await provider.send("eth_requestAccounts", []);
-
-    setAccount(accounts[0]);
-  }
+  const { account, connectWallet, error, networkName } = useWallet();
 
   return (
     <div style={{ padding: "2rem" }}>
       <h1>Capstone dApp</h1>
 
+      {error && <p style={{ color: "red" }}>{error}</p>}
+
       {account ? (
         <>
           <p><strong>Connected account:</strong></p>
           <p>{account}</p>
+          <p><strong>Network:</strong> {networkName}</p>
         </>
       ) : (
-        <button onClick={connectWallet}>
-          Connect Wallet
-        </button>
+        <button onClick={connectWallet}>Connect Wallet</button>
       )}
     </div>
   );
