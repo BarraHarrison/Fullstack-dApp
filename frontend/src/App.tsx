@@ -7,12 +7,23 @@ function App() {
   const { provider, account, connectWallet, error, networkName } =
     useWallet();
 
+  console.log("App render", {
+    provider,
+    account,
+    networkName,
+  });
+
   const [tokenName, setTokenName] = useState<string | null>(null);
   const [tokenSymbol, setTokenSymbol] = useState<string | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadTokenData() {
+      console.log("loadTokenData called", {
+        provider,
+        account,
+      });
+
       if (!provider || !account) return;
 
       try {
