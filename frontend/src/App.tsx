@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
-import { ethers } from "ethers";
-import { getReadOnlyContract } from "./lib/contract";
+import {
+  fetchToken,
+  fetchBalances,
+  fetchTransfers,
+} from "./api/backend";
+import type { Transfer } from "./api/backend";
 import { OWNER_ADDRESS, USER_ADDRESS } from "./lib/demo";
 
 function App() {
@@ -11,48 +15,33 @@ function App() {
   const [ownerBalance, setOwnerBalance] = useState<string | null>(null);
   const [userBalance, setUserBalance] = useState<string | null>(null);
 
-  const [events, setEvents] = useState<
-    { from: string; to: string; value: string }[]
-  >([]);
-
+  const [events, setEvents] = useState<Transfer[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadTokenData() {
+    async function loadFromBackend() {
       try {
-        const contract = getReadOnlyContract();
+        // --- Token metadata ---
+        const token = await fetchToken();
+        setTokenName(token.name);
+        setTokenSymbol(token.symbol);
+        setTotalSupply(token.totalSupply);
 
-        const name = await contract.name();
-        const symbol = await contract.symbol();
-        const supply = await contract.totalSupply();
+        // --- Balances ---
+        const balances = await fetchBalances();
+        setOwnerBalance(balances[OWNER_ADDRESS] ?? "0");
+        setUserBalance(balances[USER_ADDRESS] ?? "0");
 
-        setTokenName(name);
-        setTokenSymbol(symbol);
-        setTotalSupply(ethers.formatEther(supply));
-
-        const ownerBal = await contract.balanceOf(OWNER_ADDRESS);
-        const userBal = await contract.balanceOf(USER_ADDRESS);
-
-        setOwnerBalance(ethers.formatEther(ownerBal));
-        setUserBalance(ethers.formatEther(userBal));
-
-        const filter = contract.filters.Transfer();
-        const logs = await contract.queryFilter(filter, 0, "latest");
-
-        const formattedEvents = logs.slice(-5).map((log) => ({
-          from: log.args?.from,
-          to: log.args?.to,
-          value: ethers.formatEther(log.args?.value),
-        }));
-
-        setEvents(formattedEvents);
+        // --- Transfers ---
+        const transfers = await fetchTransfers();
+        setEvents(transfers);
       } catch (err) {
-        console.error("Failed to load token data", err);
-        setError("Failed to load token data");
+        console.error("Backend fetch failed", err);
+        setError("Failed to load data from backend");
       }
     }
 
-    loadTokenData();
+    loadFromBackend();
   }, []);
 
   return (
@@ -66,9 +55,15 @@ function App() {
 
       {tokenName ? (
         <>
-          <p><strong>Name:</strong> {tokenName}</p>
-          <p><strong>Symbol:</strong> {tokenSymbol}</p>
-          <p><strong>Total Supply:</strong> {totalSupply}</p>
+          <p>
+            <strong>Name:</strong> {tokenName}
+          </p>
+          <p>
+            <strong>Symbol:</strong> {tokenSymbol}
+          </p>
+          <p>
+            <strong>Total Supply:</strong> {totalSupply}
+          </p>
         </>
       ) : (
         <p>Loading token data...</p>
@@ -97,8 +92,8 @@ function App() {
       {events.length > 0 ? (
         <ul>
           {events.map((e, i) => (
-            <li key={i}>
-              {e.from.slice(0, 6)}… → {e.to.slice(0, 6)}… : {e.value} CPT
+            <li key={e.txHash ?? i}>
+              {e.from.slice(0, 6)}… → {e.to.slice(0, 6)}… : {e.amount} CPT
             </li>
           ))}
         </ul>
