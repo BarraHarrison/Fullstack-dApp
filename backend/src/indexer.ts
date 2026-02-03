@@ -1,5 +1,5 @@
 import { capstoneToken } from "./contract";
-import { ethers } from "ethers";
+import { ethers, EventLog } from "ethers";
 
 let lastProcessedBlock = 0;
 
@@ -12,20 +12,24 @@ export async function startIndexer() {
     setInterval(async () => {
         try {
             const latestBlock = await provider.getBlockNumber();
-
             if (latestBlock <= lastProcessedBlock) return;
 
-            const events = await capstoneToken.queryFilter(
+            const logs = await capstoneToken.queryFilter(
                 capstoneToken.filters.Transfer(),
                 lastProcessedBlock + 1,
                 latestBlock
             );
 
-            for (const e of events) {
-                const { from, to, value } = e.args!;
+            for (const log of logs) {
+                if (!(log instanceof EventLog)) continue;
+
+                const { from, to, value } = log.args;
+
                 console.log(
                     `Indexed transfer: ${from} → ${to} (${ethers.formatEther(value)})`
                 );
+
+                // TODO: store in memory / DB
             }
 
             lastProcessedBlock = latestBlock;
