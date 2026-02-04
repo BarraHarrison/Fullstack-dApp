@@ -69,6 +69,19 @@ async function printBalances(
     }
 }
 
+type VestingSchedule = {
+    total: bigint;
+    released: bigint;
+    step: bigint;
+};
+
+const vesting: VestingSchedule = {
+    total: ethers.parseEther("100"),
+    released: ethers.parseEther("0"),
+    step: ethers.parseEther("25"),
+};
+
+
 async function main() {
     const [owner, userA, userB, userC] = await ethers.getSigners();
     const token = await ethers.getContractAt("CapstoneToken", process.env.CONTRACT_ADDRESS ?? "");
