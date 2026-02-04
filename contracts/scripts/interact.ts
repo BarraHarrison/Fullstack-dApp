@@ -156,6 +156,97 @@ async function main() {
         );
     }
 
+    // -------------------------
+    // Phase 3: Simulating Allowances & Delegated Transfers
+    // -------------------------
+    console.log("\n--- Phase 3: Allowances & Delegated Transfers ---");
+
+    const allowanceAmount = ethers.parseEther("50");
+
+    console.log(
+        `UserA approves UserB to spend ${ethers.formatEther(allowanceAmount)} CPT`
+    );
+
+    await token.connect(userA).approve(userB.address, allowanceAmount);
+
+    const allowanceAfterApproval = await token.allowance(
+        userA.address,
+        userB.address
+    );
+
+    console.log(
+        `Allowance (UserA → UserB): ${ethers.formatEther(allowanceAfterApproval)} CPT`
+    );
+
+    const delegatedTransfer = ethers.parseEther("20");
+
+    console.log(
+        `UserB transfers ${ethers.formatEther(delegatedTransfer)} CPT from UserA to UserC`
+    );
+
+    await token
+        .connect(userB)
+        .transferFrom(userA.address, userC.address, delegatedTransfer);
+
+    await logBalances("After delegated transfer", {
+        owner,
+        userA,
+        userB,
+        userC,
+        token,
+    });
+
+    const allowanceAfterSpend = await token.allowance(
+        userA.address,
+        userB.address
+    );
+
+    console.log(
+        `Remaining allowance (UserA → UserB): ${ethers.formatEther(allowanceAfterSpend)} CPT`
+    );
+
+    console.log("\n--- Failure Scenario: Exceed remaining allowance ---");
+
+    try {
+        await token
+            .connect(userB)
+            .transferFrom(
+                userA.address,
+                userC.address,
+                ethers.parseEther("40")
+            );
+        console.log("❌ Unexpected success");
+    } catch (err: any) {
+        console.log("✅ Expected failure: allowance exceeded");
+        console.log(`   ↳ Reason: ${err.message}`);
+    }
+
+    console.log("\nUserA revokes allowance (sets to 0)");
+
+    await token.connect(userA).approve(userB.address, 0);
+
+    const allowanceAfterRevoke = await token.allowance(
+        userA.address,
+        userB.address
+    );
+
+    console.log(
+        `Allowance after revoke: ${ethers.formatEther(allowanceAfterRevoke)} CPT`
+    );
+
+    try {
+        await token
+            .connect(userB)
+            .transferFrom(
+                userA.address,
+                userC.address,
+                ethers.parseEther("1")
+            );
+        console.log("❌ Unexpected success");
+    } catch (err: any) {
+        console.log("✅ Expected failure after revoke");
+        console.log(`   ↳ Reason: ${err.message}`);
+    }
 
 
     console.log("\n✅ Interaction scenario complete.");
