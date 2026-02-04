@@ -8,6 +8,29 @@ function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function attemptTransfer(
+    label: string,
+    sender: any,
+    to: string,
+    amount: string
+) {
+    try {
+        console.log(`Attempting: ${label}`);
+        const tx = await sender.transfer(to, ethers.parseEther(amount));
+        await tx.wait();
+        console.log(`✅ Success: ${label}`);
+    } catch (err: any) {
+        const reason =
+            err?.shortMessage ||
+            err?.reason ||
+            err?.message ||
+            "Unknown error";
+
+        console.log(`❌ Expected failure: ${label}`);
+        console.log(`   ↳ Reason: ${reason}`);
+    }
+}
+
 async function printBalances(
     token: any,
     label: string,
