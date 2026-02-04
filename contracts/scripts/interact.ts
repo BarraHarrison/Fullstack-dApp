@@ -141,6 +141,22 @@ async function main() {
         "1"
     );
 
+    console.log("\n--- Failure Scenario 3: transferFrom without approval ---");
+
+    try {
+        await token
+            .connect(userC)
+            .transferFrom(userA.address, userC.address, ethers.parseEther("5"));
+        console.log("❌ Unexpected success: transferFrom without approval");
+    } catch (err: any) {
+        console.log("✅ Expected failure: transferFrom without approval");
+        console.log(
+            "   ↳ Reason:",
+            err?.shortMessage || err?.reason || err?.message
+        );
+    }
+
+
 
     console.log("\n✅ Interaction scenario complete.");
 }
