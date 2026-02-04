@@ -132,6 +132,15 @@ async function main() {
         "10000"
     );
 
+    console.log("\n--- Failure Scenario 2: Zero-address transfer ---");
+
+    await attemptTransfer(
+        "UserB sends to zero address",
+        token.connect(userB),
+        ethers.ZeroAddress,
+        "1"
+    );
+
 
     console.log("\n✅ Interaction scenario complete.");
 }
