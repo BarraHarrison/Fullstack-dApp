@@ -1,30 +1,8 @@
 import { ethers } from "hardhat";
 
-async function logBalances(
-    label: string,
-    params: {
-        owner: any;
-        userA: any;
-        userB: any;
-        userC: any;
-        token: any;
-    }
-) {
-    const { owner, userA, userB, userC, token } = params;
-
-    console.log(`\n=== ${label} ===`);
-
-    const ownerBal = await token.balanceOf(owner.address);
-    const userABal = await token.balanceOf(userA.address);
-    const userBBal = await token.balanceOf(userB.address);
-    const userCBal = await token.balanceOf(userC.address);
-
-    console.log(`Owner (${owner.address.slice(0, 6)}…): ${ethers.formatEther(ownerBal)} CPT`);
-    console.log(`UserA (${userA.address.slice(0, 6)}…): ${ethers.formatEther(userABal)} CPT`);
-    console.log(`UserB (${userB.address.slice(0, 6)}…): ${ethers.formatEther(userBBal)} CPT`);
-    console.log(`UserC (${userC.address.slice(0, 6)}…): ${ethers.formatEther(userCBal)} CPT`);
-}
-
+/* -------------------------------------------------
+   Helpers
+------------------------------------------------- */
 
 function short(addr: string) {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -32,6 +10,18 @@ function short(addr: string) {
 
 function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function printBalances(
+    token: any,
+    label: string,
+    addresses: { name: string; addr: string }[]
+) {
+    console.log(`\n=== ${label} ===`);
+    for (const a of addresses) {
+        const bal = await token.balanceOf(a.addr);
+        console.log(`${a.name} (${short(a.addr)}): ${ethers.formatEther(bal)} CPT`);
+    }
 }
 
 async function attemptTransfer(
@@ -57,17 +47,45 @@ async function attemptTransfer(
     }
 }
 
-async function printBalances(
-    token: any,
+async function logBalances(
     label: string,
-    addresses: { name: string; addr: string }[]
-) {
-    console.log(`\n=== ${label} ===`);
-    for (const a of addresses) {
-        const bal = await token.balanceOf(a.addr);
-        console.log(`${a.name} (${short(a.addr)}): ${ethers.formatEther(bal)} CPT`);
+    params: {
+        owner: any;
+        userA: any;
+        userB: any;
+        userC: any;
+        token: any;
     }
+) {
+    const { owner, userA, userB, userC, token } = params;
+
+    console.log(`\n=== ${label} ===`);
+
+    console.log(
+        `Owner (${short(owner.address)}): ${ethers.formatEther(
+            await token.balanceOf(owner.address)
+        )} CPT`
+    );
+    console.log(
+        `UserA (${short(userA.address)}): ${ethers.formatEther(
+            await token.balanceOf(userA.address)
+        )} CPT`
+    );
+    console.log(
+        `UserB (${short(userB.address)}): ${ethers.formatEther(
+            await token.balanceOf(userB.address)
+        )} CPT`
+    );
+    console.log(
+        `UserC (${short(userC.address)}): ${ethers.formatEther(
+            await token.balanceOf(userC.address)
+        )} CPT`
+    );
 }
+
+/* -------------------------------------------------
+   Vesting Model (off-chain simulation)
+------------------------------------------------- */
 
 type VestingSchedule = {
     total: bigint;
@@ -81,10 +99,47 @@ const vesting: VestingSchedule = {
     step: ethers.parseEther("25"),
 };
 
+async function releaseVestedAllowance(
+    token: any,
+    owner: any,
+    spender: string,
+    vesting: VestingSchedule
+) {
+    if (vesting.released >= vesting.total) {
+        console.log("⚠️ All tokens already vested");
+        return;
+    }
+
+    vesting.released += vesting.step;
+    if (vesting.released > vesting.total) {
+        vesting.released = vesting.total;
+    }
+
+    console.log(
+        `⏳ Vesting release: approving ${ethers.formatEther(
+            vesting.released
+        )} CPT`
+    );
+
+    await token.connect(owner).approve(spender, vesting.released);
+
+    console.log(
+        `Allowance updated → ${ethers.formatEther(
+            await token.allowance(owner.address, spender)
+        )} CPT`
+    );
+}
+
+/* -------------------------------------------------
+   Main Script
+------------------------------------------------- */
 
 async function main() {
     const [owner, userA, userB, userC] = await ethers.getSigners();
-    const token = await ethers.getContractAt("CapstoneToken", process.env.CONTRACT_ADDRESS ?? "");
+    const token = await ethers.getContractAt(
+        "CapstoneToken",
+        process.env.CONTRACT_ADDRESS ?? ""
+    );
 
     console.log("Owner:", owner.address);
     console.log("Users:", userA.address, userB.address, userC.address);
@@ -98,80 +153,57 @@ async function main() {
 
     await printBalances(token, "Initial balances", actors);
 
-    // -------------------------
-    // Phase 1: Owner distributes tokens
-    // -------------------------
+    /* -------------------------------------------------
+       Phase 1: Owner distribution
+    ------------------------------------------------- */
     console.log("\n--- Phase 1: Owner distribution ---");
 
-    const distA = ethers.parseEther("120");
-    const distB = ethers.parseEther("80");
-    const distC = ethers.parseEther("50");
-
-    console.log(`Owner -> UserA: ${ethers.formatEther(distA)} CPT`);
-    await (await token.connect(owner).transfer(userA.address, distA)).wait();
+    await token.connect(owner).transfer(userA.address, ethers.parseEther("120"));
     await sleep(300);
-
-    console.log(`Owner -> UserB: ${ethers.formatEther(distB)} CPT`);
-    await (await token.connect(owner).transfer(userB.address, distB)).wait();
+    await token.connect(owner).transfer(userB.address, ethers.parseEther("80"));
     await sleep(300);
-
-    console.log(`Owner -> UserC: ${ethers.formatEther(distC)} CPT`);
-    await (await token.connect(owner).transfer(userC.address, distC)).wait();
+    await token.connect(owner).transfer(userC.address, ethers.parseEther("50"));
     await sleep(300);
 
     await printBalances(token, "After owner distribution", actors);
 
-    // -------------------------
-    // Phase 2: Simulate “activity rounds”
-    // -------------------------
-    console.log("\n--- Phase 2: Activity rounds (user-to-user transfers) ---");
+    /* -------------------------------------------------
+       Phase 2: Activity rounds
+    ------------------------------------------------- */
+    console.log("\n--- Phase 2: Activity rounds ---");
 
     const rounds = [
-        {
-            label: "Round 1",
-            actions: [
-                { from: userA, to: userB.address, amount: "15" },
-                { from: userB, to: userC.address, amount: "10" },
-            ],
-        },
-        {
-            label: "Round 2",
-            actions: [
-                { from: userC, to: userA.address, amount: "5" },
-                { from: userA, to: userC.address, amount: "7.5" },
-            ],
-        },
-        {
-            label: "Round 3",
-            actions: [
-                { from: userB, to: userA.address, amount: "12" },
-            ],
-        },
+        [
+            { from: userA, to: userB.address, amount: "15" },
+            { from: userB, to: userC.address, amount: "10" },
+        ],
+        [
+            { from: userC, to: userA.address, amount: "5" },
+            { from: userA, to: userC.address, amount: "7.5" },
+        ],
+        [{ from: userB, to: userA.address, amount: "12" }],
     ];
 
-    for (const round of rounds) {
-        console.log(`\n${round.label}`);
-
-        for (const a of round.actions) {
-            const value = ethers.parseEther(a.amount);
-            console.log(`${short(a.from.address)} -> ${short(a.to)}: ${a.amount} CPT`);
-            await (await token.connect(a.from).transfer(a.to, value)).wait();
+    for (const [i, actions] of rounds.entries()) {
+        console.log(`\nRound ${i + 1}`);
+        for (const a of actions) {
+            await token
+                .connect(a.from)
+                .transfer(a.to, ethers.parseEther(a.amount));
             await sleep(300);
         }
-
-        await printBalances(token, `${round.label} balances`, actors);
+        await printBalances(token, `After round ${i + 1}`, actors);
     }
 
-    console.log("\n--- Failure Scenario 1: Overspend attempt ---");
-
+    /* -------------------------------------------------
+       Failure Scenarios
+    ------------------------------------------------- */
     await attemptTransfer(
-        "UserA tries to send 10,000 CPT (insufficient balance)",
+        "UserA tries to send 10,000 CPT",
         token.connect(userA),
         userB.address,
         "10000"
     );
-
-    console.log("\n--- Failure Scenario 2: Zero-address transfer ---");
 
     await attemptTransfer(
         "UserB sends to zero address",
@@ -180,52 +212,24 @@ async function main() {
         "1"
     );
 
-    console.log("\n--- Failure Scenario 3: transferFrom without approval ---");
-
     try {
         await token
             .connect(userC)
             .transferFrom(userA.address, userC.address, ethers.parseEther("5"));
-        console.log("❌ Unexpected success: transferFrom without approval");
-    } catch (err: any) {
+    } catch {
         console.log("✅ Expected failure: transferFrom without approval");
-        console.log(
-            "   ↳ Reason:",
-            err?.shortMessage || err?.reason || err?.message
-        );
     }
 
-    // -------------------------
-    // Phase 3: Simulating Allowances & Delegated Transfers
-    // -------------------------
+    /* -------------------------------------------------
+       Phase 3: Allowances & Delegated Transfers
+    ------------------------------------------------- */
     console.log("\n--- Phase 3: Allowances & Delegated Transfers ---");
 
-    const allowanceAmount = ethers.parseEther("50");
-
-    console.log(
-        `UserA approves UserB to spend ${ethers.formatEther(allowanceAmount)} CPT`
-    );
-
-    await token.connect(userA).approve(userB.address, allowanceAmount);
-
-    const allowanceAfterApproval = await token.allowance(
-        userA.address,
-        userB.address
-    );
-
-    console.log(
-        `Allowance (UserA → UserB): ${ethers.formatEther(allowanceAfterApproval)} CPT`
-    );
-
-    const delegatedTransfer = ethers.parseEther("20");
-
-    console.log(
-        `UserB transfers ${ethers.formatEther(delegatedTransfer)} CPT from UserA to UserC`
-    );
+    await token.connect(userA).approve(userB.address, ethers.parseEther("50"));
 
     await token
         .connect(userB)
-        .transferFrom(userA.address, userC.address, delegatedTransfer);
+        .transferFrom(userA.address, userC.address, ethers.parseEther("20"));
 
     await logBalances("After delegated transfer", {
         owner,
@@ -235,58 +239,39 @@ async function main() {
         token,
     });
 
-    const allowanceAfterSpend = await token.allowance(
-        userA.address,
-        userB.address
-    );
-
-    console.log(
-        `Remaining allowance (UserA → UserB): ${ethers.formatEther(allowanceAfterSpend)} CPT`
-    );
-
-    console.log("\n--- Failure Scenario: Exceed remaining allowance ---");
-
-    try {
-        await token
-            .connect(userB)
-            .transferFrom(
-                userA.address,
-                userC.address,
-                ethers.parseEther("40")
-            );
-        console.log("❌ Unexpected success");
-    } catch (err: any) {
-        console.log("✅ Expected failure: allowance exceeded");
-        console.log(`   ↳ Reason: ${err.message}`);
-    }
-
-    console.log("\nUserA revokes allowance (sets to 0)");
-
     await token.connect(userA).approve(userB.address, 0);
 
-    const allowanceAfterRevoke = await token.allowance(
-        userA.address,
-        userB.address
-    );
+    /* -------------------------------------------------
+       Phase 4: Time-based Vesting Simulation
+    ------------------------------------------------- */
+    console.log("\n--- Phase 4: Time-based Allowance (Vesting) ---");
 
-    console.log(
-        `Allowance after revoke: ${ethers.formatEther(allowanceAfterRevoke)} CPT`
-    );
+    vesting.released = ethers.parseEther("0");
+
+    await releaseVestedAllowance(token, userA, userB.address, vesting);
 
     try {
         await token
             .connect(userB)
-            .transferFrom(
-                userA.address,
-                userC.address,
-                ethers.parseEther("1")
-            );
-        console.log("❌ Unexpected success");
-    } catch (err: any) {
-        console.log("✅ Expected failure after revoke");
-        console.log(`   ↳ Reason: ${err.message}`);
+            .transferFrom(userA.address, userC.address, ethers.parseEther("40"));
+    } catch {
+        console.log("✅ Expected failure: vesting not unlocked yet");
     }
 
+    await sleep(500);
+    await releaseVestedAllowance(token, userA, userB.address, vesting);
+
+    await token
+        .connect(userB)
+        .transferFrom(userA.address, userC.address, ethers.parseEther("40"));
+
+    await logBalances("After vested delegated transfer", {
+        owner,
+        userA,
+        userB,
+        userC,
+        token,
+    });
 
     console.log("\n✅ Interaction scenario complete.");
 }
