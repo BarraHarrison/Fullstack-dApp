@@ -1,5 +1,31 @@
 import { ethers } from "hardhat";
 
+async function logBalances(
+    label: string,
+    params: {
+        owner: any;
+        userA: any;
+        userB: any;
+        userC: any;
+        token: any;
+    }
+) {
+    const { owner, userA, userB, userC, token } = params;
+
+    console.log(`\n=== ${label} ===`);
+
+    const ownerBal = await token.balanceOf(owner.address);
+    const userABal = await token.balanceOf(userA.address);
+    const userBBal = await token.balanceOf(userB.address);
+    const userCBal = await token.balanceOf(userC.address);
+
+    console.log(`Owner (${owner.address.slice(0, 6)}…): ${ethers.formatEther(ownerBal)} CPT`);
+    console.log(`UserA (${userA.address.slice(0, 6)}…): ${ethers.formatEther(userABal)} CPT`);
+    console.log(`UserB (${userB.address.slice(0, 6)}…): ${ethers.formatEther(userBBal)} CPT`);
+    console.log(`UserC (${userC.address.slice(0, 6)}…): ${ethers.formatEther(userCBal)} CPT`);
+}
+
+
 function short(addr: string) {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
