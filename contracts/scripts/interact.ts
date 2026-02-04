@@ -123,6 +123,16 @@ async function main() {
         await printBalances(token, `${round.label} balances`, actors);
     }
 
+    console.log("\n--- Failure Scenario 1: Overspend attempt ---");
+
+    await attemptTransfer(
+        "UserA tries to send 10,000 CPT (insufficient balance)",
+        token.connect(userA),
+        userB.address,
+        "10000"
+    );
+
+
     console.log("\n✅ Interaction scenario complete.");
 }
 
