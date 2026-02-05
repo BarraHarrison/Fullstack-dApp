@@ -17,6 +17,15 @@ type VestingSchedule = {
     lastReleaseBlock: number;
 };
 
+type Allowance = {
+    owner: string;
+    spender: string;
+    amount: string;
+};
+
+const allowances: Record<string, Allowance> = {};
+
+
 let lastProcessedBlock = 0;
 
 const balances: Record<string, string> = {};
