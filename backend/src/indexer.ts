@@ -53,7 +53,9 @@ export async function startIndexer() {
             const latestBlock = await provider.getBlockNumber();
             if (latestBlock <= lastProcessedBlock) return;
 
-            // ---- Transfers ----
+            // ===============================
+            // TRANSFERS
+            // ===============================
             const transferLogs = await capstoneToken.queryFilter(
                 capstoneToken.filters.Transfer(),
                 lastProcessedBlock + 1,
@@ -84,7 +86,9 @@ export async function startIndexer() {
                 console.log(`Indexed transfer: ${from} → ${to} (${amount})`);
             }
 
-            // ---- Approvals (Vesting) ----
+            // ===============================
+            // APPROVALS / VESTING
+            // ===============================
             const approvalLogs = await capstoneToken.queryFilter(
                 capstoneToken.filters.Approval(),
                 lastProcessedBlock + 1,
@@ -104,7 +108,7 @@ export async function startIndexer() {
                         spender,
                         total: allowance,
                         released: allowance,
-                        step: ethers.formatEther(ethers.parseEther("25")),
+                        step: "25",
                         lastReleaseBlock: latestBlock,
                     };
                 } else {
@@ -117,7 +121,11 @@ export async function startIndexer() {
                 );
             }
 
+            // ===============================
+            // ADVANCE BLOCK POINTER
+            // ===============================
             lastProcessedBlock = latestBlock;
+
         } catch (err) {
             console.error("Indexer error:", err);
         }
