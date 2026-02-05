@@ -8,10 +8,24 @@ type Transfer = {
     txHash: string;
 };
 
+type VestingSchedule = {
+    owner: string;
+    spender: string;
+    total: string;
+    released: string;
+    step: string;
+    lastReleaseBlock: number;
+};
+
 let lastProcessedBlock = 0;
 
 const balances: Record<string, string> = {};
 const transfers: Transfer[] = [];
+const vestingSchedules: Record<string, VestingSchedule> = {};
+
+function vestingKey(owner: string, spender: string) {
+    return `${owner.toLowerCase()}-${spender.toLowerCase()}`;
+}
 
 export async function startIndexer() {
     console.log("Starting indexer (polling mode)...");
@@ -30,13 +44,14 @@ export async function startIndexer() {
             const latestBlock = await provider.getBlockNumber();
             if (latestBlock <= lastProcessedBlock) return;
 
-            const logs = await capstoneToken.queryFilter(
+            // ---- Transfers ----
+            const transferLogs = await capstoneToken.queryFilter(
                 capstoneToken.filters.Transfer(),
                 lastProcessedBlock + 1,
                 latestBlock
             );
 
-            for (const log of logs) {
+            for (const log of transferLogs) {
                 if (!(log instanceof EventLog)) continue;
 
                 const { from, to, value } = log.args;
@@ -50,17 +65,46 @@ export async function startIndexer() {
                 balances[to] =
                     (Number(balances[to] ?? "0") + Number(amount)).toString();
 
-                const transfer: Transfer = {
+                transfers.push({
                     from,
                     to,
                     amount,
                     txHash: log.transactionHash,
-                };
+                });
 
-                transfers.push(transfer);
+                console.log(`Indexed transfer: ${from} → ${to} (${amount})`);
+            }
+
+            // ---- Approvals (Vesting) ----
+            const approvalLogs = await capstoneToken.queryFilter(
+                capstoneToken.filters.Approval(),
+                lastProcessedBlock + 1,
+                latestBlock
+            );
+
+            for (const log of approvalLogs) {
+                if (!(log instanceof EventLog)) continue;
+
+                const { owner, spender, value } = log.args;
+                const allowance = ethers.formatEther(value);
+                const key = vestingKey(owner, spender);
+
+                if (!vestingSchedules[key]) {
+                    vestingSchedules[key] = {
+                        owner,
+                        spender,
+                        total: allowance,
+                        released: allowance,
+                        step: ethers.formatEther(ethers.parseEther("25")),
+                        lastReleaseBlock: latestBlock,
+                    };
+                } else {
+                    vestingSchedules[key].released = allowance;
+                    vestingSchedules[key].lastReleaseBlock = latestBlock;
+                }
 
                 console.log(
-                    `Indexed transfer: ${from} → ${to} (${amount})`
+                    `Indexed approval (vesting): ${owner} → ${spender} (${allowance})`
                 );
             }
 
@@ -77,4 +121,8 @@ export function getBalances() {
 
 export function getTransfers() {
     return transfers.slice(-10).reverse();
+}
+
+export function getVestingSchedules() {
+    return Object.values(vestingSchedules);
 }
