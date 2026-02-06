@@ -31,10 +31,15 @@ export type VestingView = {
     spent: string;
     available: string;
 
+    progressPct: number;
+    isFullyVested: boolean;
+
     startBlock: number;
     intervalBlocks: number;
     step: string;
+
     nextReleaseBlock: number | null;
+    blocksUntilNextRelease: number | null;
 };
 
 /* -----------------------------
@@ -250,17 +255,32 @@ export function getVesting(currentBlock?: number): VestingView[] {
 
         const nextReleaseBlock = computeNextReleaseBlock(s, nowBlock);
 
+        const progressPct =
+            s.total === 0n
+                ? 0
+                : Number((released * 100n) / s.total);
+
         return {
             owner: s.owner,
             spender: s.spender,
+
             total: ethers.formatEther(s.total),
             released: ethers.formatEther(released),
             spent: ethers.formatEther(spent),
             available: ethers.formatEther(available),
+
+            progressPct,
+            isFullyVested: released >= s.total,
+
             startBlock: s.startBlock,
             intervalBlocks: s.intervalBlocks,
             step: ethers.formatEther(s.step),
+
             nextReleaseBlock,
+            blocksUntilNextRelease:
+                nextReleaseBlock === null
+                    ? null
+                    : Math.max(0, nextReleaseBlock - nowBlock),
         };
     });
 }
