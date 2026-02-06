@@ -2,6 +2,10 @@ import { capstoneToken, CONTRACT_ADDRESS } from "./contract";
 import CapstoneTokenArtifact from "./abi/CapstoneToken.json";
 import { ethers, EventLog } from "ethers";
 
+/* -----------------------------
+   Types
+----------------------------- */
+
 type Transfer = {
     from: string;
     to: string;
@@ -12,47 +16,56 @@ type Transfer = {
 type VestingSchedule = {
     owner: string;
     spender: string;
-    total: bigint;          // approved total (grant)
-    step: bigint;           // vesting step amount
-    startBlock: number;     // when grant was created
-    intervalBlocks: number; // blocks per step unlock
+    total: bigint;
+    step: bigint;
+    intervalBlocks: number;
+    startBlock: number;
 };
 
-type VestingView = {
+export type VestingView = {
     owner: string;
     spender: string;
+
     total: string;
     released: string;
     spent: string;
     available: string;
+
     startBlock: number;
     intervalBlocks: number;
     step: string;
     nextReleaseBlock: number | null;
 };
 
+/* -----------------------------
+   In-memory state
+----------------------------- */
+
 let lastProcessedBlock = 0;
 
 const balances: Record<string, string> = {};
 const transfers: Transfer[] = [];
 
-// key = "owner:spender"
 const vestingSchedules: Record<string, VestingSchedule> = {};
 const vestingSpent: Record<string, bigint> = {};
+
+/* -----------------------------
+   Helpers / config
+----------------------------- */
 
 function keyOf(owner: string, spender: string) {
     return `${owner.toLowerCase()}:${spender.toLowerCase()}`;
 }
 
+const DEFAULT_STEP = ethers.parseEther("25");
+const DEFAULT_INTERVAL_BLOCKS = 10;
+
 const iface = new ethers.Interface((CapstoneTokenArtifact as any).abi);
 
-// ---- Vesting policy (you can tweak later) ----
-const DEFAULT_STEP = ethers.parseEther("25");     // 25 CPT unlocked per step
-const DEFAULT_INTERVAL_BLOCKS = 10;              // unlock every 10 blocks (fast for demo)
-
 function computeReleased(schedule: VestingSchedule, currentBlock: number): bigint {
-    const elapsed = Math.max(0, currentBlock - schedule.startBlock);
-    const stepsUnlocked = Math.floor(elapsed / schedule.intervalBlocks) + 1; // +1 means first chunk unlocks immediately after startBlock
+    const elapsedBlocks = Math.max(0, currentBlock - schedule.startBlock);
+    const stepsUnlocked = Math.floor(elapsedBlocks / schedule.intervalBlocks) + 1;
+
     const released = schedule.step * BigInt(stepsUnlocked);
     return released > schedule.total ? schedule.total : released;
 }
@@ -61,24 +74,28 @@ function computeNextReleaseBlock(schedule: VestingSchedule, currentBlock: number
     const released = computeReleased(schedule, currentBlock);
     if (released >= schedule.total) return null;
 
-    const elapsed = Math.max(0, currentBlock - schedule.startBlock);
-    const stepsUnlocked = Math.floor(elapsed / schedule.intervalBlocks) + 1;
+    const elapsedBlocks = Math.max(0, currentBlock - schedule.startBlock);
+    const stepsUnlocked = Math.floor(elapsedBlocks / schedule.intervalBlocks) + 1;
+
     return schedule.startBlock + stepsUnlocked * schedule.intervalBlocks;
 }
+
+/* -----------------------------
+   Indexer
+----------------------------- */
 
 export async function startIndexer() {
     console.log("Starting indexer (polling mode)...");
 
     const provider = capstoneToken.runner?.provider as ethers.Provider;
 
-    // Start from current head (don’t replay old chain unless you want to)
     lastProcessedBlock = await provider.getBlockNumber();
 
-    // seed owner balance
-    const owner = await capstoneToken.owner();
-    const ownerBalance = await capstoneToken.balanceOf(owner);
-    balances[owner] = ethers.formatEther(ownerBalance);
-    console.log("Owner indexed:", owner, balances[owner]);
+    // Seed owner balance
+    const ownerAddr = await capstoneToken.owner();
+    const ownerBal = await capstoneToken.balanceOf(ownerAddr);
+    balances[ownerAddr] = ethers.formatEther(ownerBal);
+    console.log("Owner indexed:", ownerAddr, balances[ownerAddr]);
 
     setInterval(async () => {
         try {
@@ -88,9 +105,9 @@ export async function startIndexer() {
             const fromBlock = lastProcessedBlock + 1;
             const toBlock = latestBlock;
 
-            // -------------------------
-            // 1) Index Transfers (events)
-            // -------------------------
+            /* -------------------------
+               1) Index Transfers
+            ------------------------- */
             const transferLogs = await capstoneToken.queryFilter(
                 capstoneToken.filters.Transfer(),
                 fromBlock,
@@ -118,9 +135,9 @@ export async function startIndexer() {
                 console.log(`Indexed transfer: ${from} → ${to} (${amount})`);
             }
 
-            // -------------------------
-            // 2) Index Approvals (grant)
-            // -------------------------
+            /* -------------------------
+               2) Index Approvals → Create/Update/Revoke vesting schedules
+            ------------------------- */
             const approvalLogs = await capstoneToken.queryFilter(
                 capstoneToken.filters.Approval(),
                 fromBlock,
@@ -135,7 +152,7 @@ export async function startIndexer() {
 
                 const total = BigInt(value);
 
-                // If approval is set to 0, treat as revoke (delete schedule)
+                // Revoke
                 if (total === 0n) {
                     delete vestingSchedules[k];
                     delete vestingSpent[k];
@@ -143,27 +160,28 @@ export async function startIndexer() {
                     continue;
                 }
 
-                // Create or overwrite schedule (latest approval wins)
+                // Create/overwrite schedule (latest approval wins)
                 vestingSchedules[k] = {
                     owner,
                     spender,
                     total,
                     step: DEFAULT_STEP,
-                    startBlock: toBlock, // start at the block we processed
                     intervalBlocks: DEFAULT_INTERVAL_BLOCKS,
+                    startBlock: toBlock, // treat this approval as "vesting start"
                 };
 
-                // Reset spent when a new approval is issued (common “new grant” semantics for demo)
+                // For demo semantics, reset spent on new grant
                 vestingSpent[k] = 0n;
 
                 console.log(
-                    `Indexed approval (grant): ${owner} → ${spender} (${ethers.formatEther(total)} CPT)`
+                    `📅 Vesting grant: ${owner} → ${spender} (${ethers.formatEther(total)} CPT)`
                 );
             }
 
-            // ----------------------------------------------------
-            // 3) Track delegated spending by decoding transferFrom
-            // ----------------------------------------------------
+            /* -------------------------
+               3) Track delegated spending (decode transferFrom calls)
+               We look at transactions sent *to the token contract* and parse transferFrom.
+            ------------------------- */
             for (let b = fromBlock; b <= toBlock; b++) {
                 const block = await provider.getBlock(b, true);
                 if (!block || !block.transactions) continue;
@@ -182,16 +200,15 @@ export async function startIndexer() {
                     }
                     if (!parsed) continue;
 
-                    // only care about transferFrom(owner, to, amount)
                     if (parsed.name !== "transferFrom") continue;
 
-                    const ownerArg = String(parsed.args[0]);
-                    const spender = String(tx.from); // msg.sender
-                    const amountArg = BigInt(parsed.args[2]);
+                    const ownerArg = String(parsed.args[0]);     // from
+                    const spender = String(tx.from);             // msg.sender
+                    const amountArg = BigInt(parsed.args[2]);    // value
 
                     const k = keyOf(ownerArg, spender);
 
-                    // Only track if we have a vesting schedule for this pair
+                    // Only track if we have a schedule for that owner→spender
                     if (!vestingSchedules[k]) continue;
 
                     vestingSpent[k] = (vestingSpent[k] ?? 0n) + amountArg;
@@ -209,6 +226,10 @@ export async function startIndexer() {
     }, 2000);
 }
 
+/* -----------------------------
+   Getters used by API routes
+----------------------------- */
+
 export function getBalances() {
     return balances;
 }
@@ -218,23 +239,21 @@ export function getTransfers() {
 }
 
 export function getVesting(currentBlock?: number): VestingView[] {
-    // if not provided, just approximate "released" based on lastProcessedBlock
     const nowBlock = currentBlock ?? lastProcessedBlock;
 
     return Object.values(vestingSchedules).map((s) => {
         const k = keyOf(s.owner, s.spender);
 
-        const total = s.total;
         const released = computeReleased(s, nowBlock);
         const spent = vestingSpent[k] ?? 0n;
-
         const available = released > spent ? released - spent : 0n;
+
         const nextReleaseBlock = computeNextReleaseBlock(s, nowBlock);
 
         return {
             owner: s.owner,
             spender: s.spender,
-            total: ethers.formatEther(total),
+            total: ethers.formatEther(s.total),
             released: ethers.formatEther(released),
             spent: ethers.formatEther(spent),
             available: ethers.formatEther(available),
@@ -259,5 +278,6 @@ export function debugVesting() {
     return {
         raw: vestingSchedules,
         list: Object.values(vestingSchedules),
+        spent: vestingSpent,
     };
 }
