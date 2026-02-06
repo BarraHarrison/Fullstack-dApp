@@ -8,10 +8,6 @@ function short(addr: string) {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-function sleep(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function printBalances(
     token: any,
     label: string,
@@ -84,53 +80,6 @@ async function logBalances(
 }
 
 /* -------------------------------------------------
-   Vesting Model (off-chain simulation)
-------------------------------------------------- */
-
-type VestingSchedule = {
-    total: bigint;
-    released: bigint;
-    step: bigint;
-};
-
-const vesting: VestingSchedule = {
-    total: ethers.parseEther("100"),
-    released: ethers.parseEther("0"),
-    step: ethers.parseEther("25"),
-};
-
-async function releaseVestedAllowance(
-    token: any,
-    owner: any,
-    spender: string,
-    vesting: VestingSchedule
-) {
-    if (vesting.released >= vesting.total) {
-        console.log("⚠️ All tokens already vested");
-        return;
-    }
-
-    vesting.released += vesting.step;
-    if (vesting.released > vesting.total) {
-        vesting.released = vesting.total;
-    }
-
-    console.log(
-        `⏳ Vesting release: approving ${ethers.formatEther(
-            vesting.released
-        )} CPT`
-    );
-
-    await token.connect(owner).approve(spender, vesting.released);
-
-    console.log(
-        `Allowance updated → ${ethers.formatEther(
-            await token.allowance(owner.address, spender)
-        )} CPT`
-    );
-}
-
-/* -------------------------------------------------
    Main Script
 ------------------------------------------------- */
 
@@ -159,11 +108,8 @@ async function main() {
     console.log("\n--- Phase 1: Owner distribution ---");
 
     await token.connect(owner).transfer(userA.address, ethers.parseEther("120"));
-    await sleep(300);
     await token.connect(owner).transfer(userB.address, ethers.parseEther("80"));
-    await sleep(300);
     await token.connect(owner).transfer(userC.address, ethers.parseEther("50"));
-    await sleep(300);
 
     await printBalances(token, "After owner distribution", actors);
 
@@ -190,7 +136,6 @@ async function main() {
             await token
                 .connect(a.from)
                 .transfer(a.to, ethers.parseEther(a.amount));
-            await sleep(300);
         }
         await printBalances(token, `After round ${i + 1}`, actors);
     }
@@ -198,6 +143,8 @@ async function main() {
     /* -------------------------------------------------
        Failure Scenarios
     ------------------------------------------------- */
+    console.log("\n--- Failure Scenarios ---");
+
     await attemptTransfer(
         "UserA tries to send 10,000 CPT",
         token.connect(userA),
@@ -216,6 +163,7 @@ async function main() {
         await token
             .connect(userC)
             .transferFrom(userA.address, userC.address, ethers.parseEther("5"));
+        console.log("❌ Unexpected success");
     } catch {
         console.log("✅ Expected failure: transferFrom without approval");
     }
@@ -225,8 +173,10 @@ async function main() {
     ------------------------------------------------- */
     console.log("\n--- Phase 3: Allowances & Delegated Transfers ---");
 
+    console.log("UserA approves UserB for 50 CPT");
     await token.connect(userA).approve(userB.address, ethers.parseEther("50"));
 
+    console.log("UserB transfers 20 CPT from UserA to UserC");
     await token
         .connect(userB)
         .transferFrom(userA.address, userC.address, ethers.parseEther("20"));
@@ -239,39 +189,8 @@ async function main() {
         token,
     });
 
+    console.log("UserA revokes allowance");
     await token.connect(userA).approve(userB.address, 0);
-
-    /* -------------------------------------------------
-       Phase 4: Time-based Vesting Simulation
-    ------------------------------------------------- */
-    console.log("\n--- Phase 4: Time-based Allowance (Vesting) ---");
-
-    vesting.released = ethers.parseEther("0");
-
-    await releaseVestedAllowance(token, userA, userB.address, vesting);
-
-    try {
-        await token
-            .connect(userB)
-            .transferFrom(userA.address, userC.address, ethers.parseEther("40"));
-    } catch {
-        console.log("✅ Expected failure: vesting not unlocked yet");
-    }
-
-    await sleep(500);
-    await releaseVestedAllowance(token, userA, userB.address, vesting);
-
-    await token
-        .connect(userB)
-        .transferFrom(userA.address, userC.address, ethers.parseEther("40"));
-
-    await logBalances("After vested delegated transfer", {
-        owner,
-        userA,
-        userB,
-        userC,
-        token,
-    });
 
     console.log("\n✅ Interaction scenario complete.");
 }
