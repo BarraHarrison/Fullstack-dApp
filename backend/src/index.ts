@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import { ethers } from "ethers";
 import { capstoneToken } from "./contract";
-import { startIndexer, getBalances, getTransfers, getVestingSchedules } from "./indexer";
+import { startIndexer, getBalances, getTransfers, getVesting } from "./indexer";
 
 const app = express();
 const PORT = 4000;
@@ -30,7 +30,7 @@ app.get("/transfers", (_req, res) => {
 });
 
 app.get("/vesting", (_req, res) => {
-    res.json(getVestingSchedules());
+    res.json(getVesting());
 });
 
 app.listen(PORT, async () => {
