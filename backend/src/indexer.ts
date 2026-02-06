@@ -245,3 +245,19 @@ export function getVesting(currentBlock?: number): VestingView[] {
         };
     });
 }
+
+export function getIndexerStatus() {
+    return {
+        lastProcessedBlock,
+        balancesCount: Object.keys(balances).length,
+        transfersCount: transfers.length,
+        vestingCount: Object.keys(vestingSchedules).length,
+    };
+}
+
+export function debugVesting() {
+    return {
+        raw: vestingSchedules,
+        list: Object.values(vestingSchedules),
+    };
+}
