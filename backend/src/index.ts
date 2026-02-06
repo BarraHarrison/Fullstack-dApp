@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import { ethers } from "ethers";
 import { capstoneToken } from "./contract";
-import { startIndexer, getBalances, getTransfers, getVesting } from "./indexer";
+import { startIndexer, getBalances, getTransfers, getVesting, getIndexerStatus, debugVesting } from "./indexer";
 
 const app = express();
 const PORT = 4000;
@@ -31,6 +31,20 @@ app.get("/transfers", (_req, res) => {
 
 app.get("/vesting", (_req, res) => {
     res.json(getVesting());
+});
+
+app.get("/health", async (_req, res) => {
+    res.json({
+        status: "ok",
+        network: "localhost",
+        contract: capstoneToken.target,
+        indexer: getIndexerStatus(),
+        timestamp: new Date().toISOString(),
+    });
+});
+
+app.get("/debug/vesting", (_req, res) => {
+    res.json(debugVesting());
 });
 
 app.listen(PORT, async () => {
