@@ -174,7 +174,7 @@ async function main() {
     console.log("\n--- Phase 3: Allowances & Delegated Transfers ---");
 
     console.log("UserA approves UserB for 50 CPT");
-    await token.connect(userA).approve(userB.address, ethers.parseEther("50"));
+    await token.connect(userA).approve(userB.address, 0);
 
     console.log("\n--- Phase 4: Vesting Grant (Approval Event) ---");
 
