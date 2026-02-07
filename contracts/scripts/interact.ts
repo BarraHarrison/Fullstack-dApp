@@ -176,6 +176,20 @@ async function main() {
     console.log("UserA approves UserB for 50 CPT");
     await token.connect(userA).approve(userB.address, ethers.parseEther("50"));
 
+    console.log("\n--- Phase 4: Vesting Grant (Approval Event) ---");
+
+    const vestingGrant = ethers.parseEther("100");
+
+    await token
+        .connect(userA)
+        .approve(userB.address, vestingGrant);
+
+    console.log(
+        `Approval emitted: ${short(userA.address)} → ${short(
+            userB.address
+        )} (${ethers.formatEther(vestingGrant)} CPT)`
+    );
+
     console.log("UserB transfers 20 CPT from UserA to UserC");
     await token
         .connect(userB)
