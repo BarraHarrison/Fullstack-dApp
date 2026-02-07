@@ -8,6 +8,7 @@ import type { Transfer } from "./api/backend";
 import { fetchVesting } from "./lib/backend";
 import type { Vesting } from "./lib/backend";
 import { OWNER_ADDRESS, USER_ADDRESS } from "./lib/demo";
+import { VestingCard } from "./components/VestingCard";
 
 function App() {
   const [tokenName, setTokenName] = useState<string | null>(null);
@@ -151,6 +152,17 @@ function App() {
           );
         })
       )}
+
+      <hr />
+
+      <h2>Vesting Schedules</h2>
+
+      {vesting.length === 0 ? (
+        <p>No active vesting schedules.</p>
+      ) : (
+        vesting.map((v, i) => <VestingCard key={i} v={v} />)
+      )}
+
     </div>
   );
 }
