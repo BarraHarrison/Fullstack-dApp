@@ -6,6 +6,19 @@ export type TokenResponse = {
     totalSupply: string;
 };
 
+export type VestingView = {
+    owner: string;
+    spender: string;
+    total: string;
+    released: string;
+    spent: string;
+    available: string;
+    startBlock: number;
+    intervalBlocks: number;
+    step: string;
+    nextReleaseBlock: number | null;
+};
+
 export type BalancesResponse = Record<string, string>;
 
 export type Transfer = {
