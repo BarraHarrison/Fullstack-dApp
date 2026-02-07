@@ -5,8 +5,8 @@ import {
   fetchTransfers,
 } from "./api/backend";
 import type { Transfer } from "./api/backend";
-import { fetchVesting } from "./lib/backend";
-import type { Vesting } from "./lib/backend";
+import { fetchVesting } from "./api/backend";
+import type { VestingView } from "./api/backend";
 import { OWNER_ADDRESS, USER_ADDRESS } from "./lib/demo";
 import { VestingCard } from "./components/VestingCard";
 
@@ -20,7 +20,7 @@ function App() {
 
   const [events, setEvents] = useState<Transfer[]>([]);
 
-  const [vesting, setVesting] = useState<Vesting[]>([]);
+  const [vesting, setVesting] = useState<VestingView[]>([]);
 
   const [error, setError] = useState<string | null>(null);
 
