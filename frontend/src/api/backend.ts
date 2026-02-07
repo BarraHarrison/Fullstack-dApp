@@ -45,3 +45,11 @@ export async function fetchTransfers(): Promise<Transfer[]> {
     if (!res.ok) throw new Error("Failed to fetch transfers");
     return res.json();
 }
+
+export async function fetchVesting(): Promise<VestingView[]> {
+    const res = await fetch("http://localhost:4000/vesting");
+    if (!res.ok) {
+        throw new Error("Failed to fetch vesting");
+    }
+    return res.json();
+}
