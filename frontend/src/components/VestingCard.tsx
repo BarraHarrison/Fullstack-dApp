@@ -1,38 +1,23 @@
-type Vesting = {
-    owner: string;
-    spender: string;
-    total: string;
-    released: string;
-    spent: string;
-    available: string;
-    nextReleaseBlock: number | null;
-};
+import type { VestingView } from "../api/backend";
 
 function short(addr: string) {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-export function VestingCard({ v }: { v: Vesting }) {
+export function VestingCard({ v }: { v: VestingView }) {
     const total = Number(v.total);
     const released = Number(v.released);
-    const progress = total > 0 ? Math.min(100, (released / total) * 100) : 0;
+    const progress =
+        total > 0 ? Math.min(100, (released / total) * 100) : 0;
 
     return (
-        <div
-            style={{
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                padding: "1rem",
-                marginBottom: "1rem",
-            }}
-        >
+        <div style={{ border: "1px solid #ccc", padding: "1rem", marginBottom: "1rem" }}>
             <p>
                 <strong>Owner:</strong> {short(v.owner)}
             </p>
             <p>
                 <strong>Spender:</strong> {short(v.spender)}
             </p>
-
             <p>
                 <strong>Total:</strong> {v.total} CPT
             </p>
@@ -45,33 +30,20 @@ export function VestingCard({ v }: { v: Vesting }) {
             <p>
                 <strong>Available:</strong> {v.available} CPT
             </p>
+            <p>
+                <strong>Next unlock block:</strong>{" "}
+                {v.nextReleaseBlock ?? "Fully vested"}
+            </p>
 
-            {/* Progress bar */}
-            <div
-                style={{
-                    background: "#eee",
-                    height: "10px",
-                    borderRadius: "5px",
-                    overflow: "hidden",
-                    margin: "0.5rem 0",
-                }}
-            >
+            <div style={{ background: "#eee", height: 10 }}>
                 <div
                     style={{
+                        background: "#4caf50",
                         width: `${progress}%`,
                         height: "100%",
-                        background: progress === 100 ? "#22c55e" : "#3b82f6",
                     }}
                 />
             </div>
-
-            {v.nextReleaseBlock === null ? (
-                <p style={{ color: "green" }}>✅ Fully vested</p>
-            ) : (
-                <p>
-                    ⏳ Next unlock at block <strong>{v.nextReleaseBlock}</strong>
-                </p>
-            )}
         </div>
     );
 }
