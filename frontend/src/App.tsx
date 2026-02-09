@@ -8,6 +8,8 @@ import {
 import type { Transfer, VestingView } from "./api/backend";
 import { OWNER_ADDRESS, USER_ADDRESS } from "./lib/demo";
 import { VestingCard } from "./components/VestingCard";
+import { tokenContract } from "./lib/chain";
+import { ethers } from "ethers";
 
 function App() {
   const [tokenName, setTokenName] = useState<string | null>(null);
@@ -23,7 +25,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   /* -------------------------
-     Load static token metadata (once)
+     Load token metadata (once)
   ------------------------- */
   useEffect(() => {
     async function loadToken() {
@@ -42,7 +44,7 @@ function App() {
   }, []);
 
   /* -------------------------
-     Live polling (balances, transfers, vesting)
+     Backend polling (state sync)
   ------------------------- */
   useEffect(() => {
     let cancelled = false;
@@ -67,12 +69,52 @@ function App() {
     }
 
     poll();
-
     const interval = setInterval(poll, 2000);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
+    };
+  }, []);
+
+  /* -------------------------
+     Blockchain live listener (instant UI)
+  ------------------------- */
+  useEffect(() => {
+    function onTransfer(
+      from: string,
+      to: string,
+      value: bigint,
+      event: ethers.EventLog
+    ) {
+      console.log("🔔 Transfer event:", from, to, value.toString());
+
+      const amount = ethers.formatEther(value);
+
+      // Push transfer instantly
+      setEvents((prev) => [
+        {
+          from,
+          to,
+          amount,
+          txHash: event.transactionHash,
+        },
+        ...prev,
+      ]);
+
+      // Refresh balances once
+      fetchBalances()
+        .then((balances) => {
+          setOwnerBalance(balances[OWNER_ADDRESS] ?? "0");
+          setUserBalance(balances[USER_ADDRESS] ?? "0");
+        })
+        .catch(console.error);
+    }
+
+    tokenContract.on("Transfer", onTransfer);
+
+    return () => {
+      tokenContract.off("Transfer", onTransfer);
     };
   }, []);
 
@@ -84,14 +126,12 @@ function App() {
       <h1>Capstone dApp (Hardhat Demo Mode)</h1>
 
       <p style={{ fontSize: "0.8rem", opacity: 0.6, marginTop: "-0.5rem" }}>
-        🔄 Live sync enabled (polling every 2s)
+        🔄 Live sync enabled (polling + blockchain events)
       </p>
 
       {error && <p style={{ color: "red" }}>{error}</p>}
 
-      {/* ---------------- Token Info ---------------- */}
       <h2>Token Info</h2>
-
       {tokenName ? (
         <>
           <p><strong>Name:</strong> {tokenName}</p>
@@ -104,16 +144,13 @@ function App() {
 
       <hr />
 
-      {/* ---------------- Balances ---------------- */}
       <h2>Balances</h2>
       <p><strong>Owner:</strong> {ownerBalance ?? "Loading…"}</p>
       <p><strong>User:</strong> {userBalance ?? "Loading…"}</p>
 
       <hr />
 
-      {/* ---------------- Transfers ---------------- */}
       <h2>Recent Transfers</h2>
-
       {events.length > 0 ? (
         <ul>
           {events.map((e, i) => (
@@ -128,62 +165,7 @@ function App() {
 
       <hr />
 
-      {/* ---------------- Vesting ---------------- */}
-      <h2>Vesting Progress</h2>
-
-      {vesting.length === 0 ? (
-        <p>No active vesting schedules.</p>
-      ) : (
-        vesting.map((v, i) => {
-          const total = Number(v.total);
-          const released = Number(v.released);
-          const progress = Math.min((released / total) * 100, 100);
-
-          return (
-            <div
-              key={i}
-              style={{
-                padding: "1rem",
-                marginBottom: "1rem",
-                border: "1px solid #ddd",
-                borderRadius: "6px",
-              }}
-            >
-              <p>
-                <strong>Owner:</strong> {v.owner.slice(0, 6)}…<br />
-                <strong>Spender:</strong> {v.spender.slice(0, 6)}…
-              </p>
-
-              <div
-                style={{
-                  height: "10px",
-                  background: "#eee",
-                  borderRadius: "5px",
-                  overflow: "hidden",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                <div
-                  style={{
-                    width: `${progress}%`,
-                    height: "100%",
-                    background: progress === 100 ? "#4caf50" : "#2196f3",
-                  }}
-                />
-              </div>
-
-              <p>
-                {released} / {total} CPT vested {progress === 100 && "🟢"}
-              </p>
-            </div>
-          );
-        })
-      )}
-
-      <hr />
-
       <h2>Vesting Schedules</h2>
-
       {vesting.length === 0 ? (
         <p>No active vesting schedules.</p>
       ) : (
