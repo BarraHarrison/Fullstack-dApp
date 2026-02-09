@@ -76,6 +76,10 @@ function App() {
     <div style={{ padding: "2rem", maxWidth: "720px" }}>
       <h1>Capstone dApp (Hardhat Demo Mode)</h1>
 
+      <p style={{ fontSize: "0.8rem", opacity: 0.6, marginTop: "-0.5rem" }}>
+        🔄 Live sync enabled (polling every 2s)
+      </p>
+
       {error && <p style={{ color: "red" }}>{error}</p>}
 
       {/* ---------------- Token Info ---------------- */}
