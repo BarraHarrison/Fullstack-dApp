@@ -54,6 +54,24 @@ function App() {
     loadFromBackend();
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const balances = await fetchBalances();
+        setOwnerBalance(balances[OWNER_ADDRESS] ?? "0");
+        setUserBalance(balances[USER_ADDRESS] ?? "0");
+
+        const transfers = await fetchTransfers();
+        setEvents(transfers);
+      } catch (err) {
+        console.error("Live sync failed", err);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+
   return (
     <div style={{ padding: "2rem", maxWidth: "720px" }}>
       <h1>Capstone dApp (Hardhat Demo Mode)</h1>
