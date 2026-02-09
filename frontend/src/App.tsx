@@ -3,10 +3,9 @@ import {
   fetchToken,
   fetchBalances,
   fetchTransfers,
+  fetchVesting,
 } from "./api/backend";
-import type { Transfer } from "./api/backend";
-import { fetchVesting } from "./api/backend";
-import type { VestingView } from "./api/backend";
+import type { Transfer, VestingView } from "./api/backend";
 import { OWNER_ADDRESS, USER_ADDRESS } from "./lib/demo";
 import { VestingCard } from "./components/VestingCard";
 
@@ -19,59 +18,67 @@ function App() {
   const [userBalance, setUserBalance] = useState<string | null>(null);
 
   const [events, setEvents] = useState<Transfer[]>([]);
-
   const [vesting, setVesting] = useState<VestingView[]>([]);
 
   const [error, setError] = useState<string | null>(null);
 
+  /* -------------------------
+     Load static token metadata (once)
+  ------------------------- */
   useEffect(() => {
-    async function loadFromBackend() {
+    async function loadToken() {
       try {
         const token = await fetchToken();
         setTokenName(token.name);
         setTokenSymbol(token.symbol);
         setTotalSupply(token.totalSupply);
-
-        const balances = await fetchBalances();
-        setOwnerBalance(balances[OWNER_ADDRESS] ?? "0");
-        setUserBalance(balances[USER_ADDRESS] ?? "0");
-
-        const transfers = await fetchTransfers();
-        setEvents(transfers);
       } catch (err) {
-        console.error("Backend fetch failed", err);
-        setError("Failed to load data from backend");
-      }
-
-      try {
-        const vestingData = await fetchVesting();
-        setVesting(vestingData);
-      } catch (err) {
-        console.error("Failed to load vesting data", err);
+        console.error("Token fetch failed", err);
+        setError("Failed to load token data");
       }
     }
 
-    loadFromBackend();
+    loadToken();
   }, []);
 
+  /* -------------------------
+     Live polling (balances, transfers, vesting)
+  ------------------------- */
   useEffect(() => {
-    const interval = setInterval(async () => {
+    let cancelled = false;
+
+    async function poll() {
       try {
-        const balances = await fetchBalances();
+        const [balances, transfers, vestingData] = await Promise.all([
+          fetchBalances(),
+          fetchTransfers(),
+          fetchVesting(),
+        ]);
+
+        if (cancelled) return;
+
         setOwnerBalance(balances[OWNER_ADDRESS] ?? "0");
         setUserBalance(balances[USER_ADDRESS] ?? "0");
-
-        const transfers = await fetchTransfers();
         setEvents(transfers);
+        setVesting(vestingData);
       } catch (err) {
         console.error("Live sync failed", err);
       }
-    }, 2000);
+    }
 
-    return () => clearInterval(interval);
+    poll();
+
+    const interval = setInterval(poll, 2000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
-
+  /* -------------------------
+     UI
+  ------------------------- */
   return (
     <div style={{ padding: "2rem", maxWidth: "720px" }}>
       <h1>Capstone dApp (Hardhat Demo Mode)</h1>
@@ -99,7 +106,6 @@ function App() {
 
       {/* ---------------- Balances ---------------- */}
       <h2>Balances</h2>
-
       <p><strong>Owner:</strong> {ownerBalance ?? "Loading…"}</p>
       <p><strong>User:</strong> {userBalance ?? "Loading…"}</p>
 
@@ -167,8 +173,7 @@ function App() {
               </div>
 
               <p>
-                {released} / {total} CPT vested{" "}
-                {progress === 100 && "🟢"}
+                {released} / {total} CPT vested {progress === 100 && "🟢"}
               </p>
             </div>
           );
@@ -184,7 +189,6 @@ function App() {
       ) : (
         vesting.map((v, i) => <VestingCard key={i} v={v} />)
       )}
-
     </div>
   );
 }
